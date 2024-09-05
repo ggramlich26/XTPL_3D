@@ -14,15 +14,18 @@ class Dxf2D:
 
     def __init__(self, dxfName: str):
         self.dxfName = dxfName
-        self.points = []    # the points read from the .dxf file
-        self.offsetX = 0    # the x offset applied
-        self.offsetY = 0    # the y offset applied
-        self.surfacePhi = 0 # the rotation which is applied to the surface
+        self.points = []  # the points read from the .dxf file
+        self.offsetX = 0  # the x offset applied
+        self.offsetY = 0  # the y offset applied
+        self.surfacePhi = 0  # the rotation which is applied to the surface
+        self.projectionMethod = 'longest segments'
+        self.z_resolution = 0
+        self.z_unit = 0
         self.read_file(dxfName)
         # Instanz erstellt
         # Dprint(self.get_dxf_name(), 'loaded')
         self.points_projected = []  # store the projected points for reuse until a different offset is applied or the the surface changes
-        self.projection_valid = False   # has to be set to False whenever the offset, rotation or surface changes
+        self.projection_valid = False  # has to be set to False whenever the offset, rotation, projection method or surface changes
 
     def get_dxf_name(self) -> str:
         """Returns just the name of the dxf file, without the path"""
@@ -235,35 +238,75 @@ class Dxf2D:
 
         return points3D
 
-    def project_v2(self, surf: surface.Surface, z_resolution: float) -> list:
+    def project_z_steps(self, surf: surface.Surface, z_resolution: float) -> list:
         """Projects the dxf polylines on to the given surface. Returns a list with the according z-coordinates of the given xy-coordinates"""
-        xy_res = 0.001
+        xy_res = 0.5 # in um
         points3D = []
 
         for pline in self.points:
             templine = []
             for i in range(len(pline) - 1):
-                x1 = pline[i][0]
-                y1 = pline[i][1]
-                x2 = pline[i+1][0]
-                y2 = pline[i+1][1]
-                dx = x2-x1
-                dy = y2-y1
-                dist = math.sqrt(dx**2 + dy**2)
-                last_z = surf.get_z_value(x1, y1)
-                templine.append([x1, y1, last_z])
-                npoints = round(dist/xy_res)
+                x1 = pline[i][0]*1000
+                y1 = pline[i][1]*1000
+                x2 = pline[i + 1][0]*1000
+                y2 = pline[i + 1][1]*1000
+                dx = x2 - x1
+                dy = y2 - y1
+                dist = math.sqrt(dx ** 2 + dy ** 2)
+                last_z = np.round(surf.get_z_value(x1/1000, y1/1000), decimals=2)
+                templine.append([x1/1000, y1/1000, last_z])
+                npoints = round(dist / xy_res)
                 for j in range(1, npoints):
-                    x = x1 + dx*j/npoints
-                    y = y1 + dy*j/npoints
-                    z = surf.get_z_value(x, y)
+                    x = x1 + dx * j / npoints
+                    y = y1 + dy * j / npoints
+                    z = np.round(surf.get_z_value(x/1000, y/1000), decimals=2)
                     if abs(z - last_z) >= z_resolution:
-                        templine.append([x, y, z])
+                        templine.append([x/1000, y/1000, z])
                         last_z = z
             x = pline[-1][0]
             y = pline[-1][1]
             z = surf.get_z_value(x, y)
             templine.append([x, y, z])
+            points3D.append(templine)
+
+        return points3D
+
+    def project_const_seg_len(self, surf: surface.Surface, seg_len: float) -> list:
+        """Projects the dxf polylines on to the given surface using segments of a constant and specified length. Returns a list with the according z-coordinates of the given xy-coordinates"""
+        xy_res = 0.1 # in um
+        points3D = []
+
+        for pline in self.points:
+            templine = []
+            for i in range(len(pline) - 1):
+                x1 = pline[i][0]*1000
+                y1 = pline[i][1]*1000
+                x2 = pline[i + 1][0]*1000
+                y2 = pline[i + 1][1]*1000
+                dx = x2 - x1
+                dy = y2 - y1
+                dist = math.sqrt(dx ** 2 + dy ** 2)
+                last_x = x1
+                last_y = y1
+                last_z = np.round(surf.get_z_value(x1/1000, y1/1000), decimals=2)
+                templine.append([x1/1000, y1/1000, last_z])
+                npoints = round(dist / xy_res)
+                for j in range(1, npoints):
+                    x = x1 + dx * j / npoints
+                    y = y1 + dy * j / npoints
+                    z = np.round(surf.get_z_value(x/1000, y/1000), decimals=2)
+                    tmp_dist = math.sqrt((x - last_x)**2 + (y - last_y)**2 + (z - last_z)**2)
+                    if tmp_dist >= seg_len:
+                        templine.append([x/1000, y/1000, z])
+                        last_x = x
+                        last_y = y
+                        last_z = z
+            # append last point of polyline if not already there
+            if templine[-1][0] != pline[-1][0] or templine[-1][1] != pline[-1][1]:
+                x = pline[-1][0]
+                y = pline[-1][1]
+                z = surf.get_z_value(x, y)
+                templine.append([x, y, z])
             points3D.append(templine)
 
         return points3D
@@ -281,23 +324,23 @@ class Dxf2D:
             for i in range(len(pline) - 1):
                 x1 = pline[i][0]
                 y1 = pline[i][1]
-                x2 = pline[i+1][0]
-                y2 = pline[i+1][1]
-                dx = x2-x1
-                dy = y2-y1
-                dist = math.sqrt(dx**2 + dy**2)
+                x2 = pline[i + 1][0]
+                y2 = pline[i + 1][1]
+                dx = x2 - x1
+                dy = y2 - y1
+                dist = math.sqrt(dx ** 2 + dy ** 2)
                 z_hist = [surf.get_z_value(x1, y1)]
                 templine.append([x1, y1, z_hist[0]])
-                npoints = round(dist/xy_res)
+                npoints = round(dist / xy_res)
                 for j in range(1, npoints):
-                    x = x1 + dx*j/npoints
-                    y = y1 + dy*j/npoints
+                    x = x1 + dx * j / npoints
+                    y = y1 + dy * j / npoints
                     z_hist.append(surf.get_z_value(x, y))
                     if len(z_hist) > 2:
-                        mz = (z_hist[-1]-z_hist[0])/len(z_hist)
+                        mz = (z_hist[-1] - z_hist[0]) / len(z_hist)
                         for k in range(1, len(z_hist)):
                             if abs(z_hist[0] + k * mz - z_hist[k]) >= z_resolution:
-                                templine.append([x1 + dx*(j-1)/npoints, y1 + dy*(j-1)/npoints, z_hist[-2]])
+                                templine.append([x1 + dx * (j - 1) / npoints, y1 + dy * (j - 1) / npoints, z_hist[-2]])
                                 z_hist = z_hist[-2:]
                                 break
             x = pline[-1][0]
@@ -327,27 +370,46 @@ class Dxf2D:
         # if the shift has been changed, the projection is invalid
         self.invalidateProjection()
 
-    def set_rotation(self, phi:float):
+    def set_rotation(self, phi: float):
         if phi != self.surfacePhi:
             self.invalidateProjection()
             self.surfacePhi = phi
 
+    def set_projection_method(self, method: str):
+        if self.projectionMethod == method:
+            return
+        elif not (method in ['const. seg. len.', 'z', 'longest segments']):
+            print('invalid projection method')
+            return
+        self.projectionMethod = method
+        self.invalidateProjection()
+
     def plot_to_surface(self, fig, ax, surf: surface.Surface, z_resolution: float, z_unit: int) -> int:
         """Plots the dxf file onto the surface. Furthermore, it updates the points_export list to the current
         coordinates. Returns the number of points after the projection."""
-        col = color=(0.63529, 0.133333, 0.13725)
+        col = color = (0.63529, 0.133333, 0.13725)
         # height data of SdfSurface is always given in um. -> set z_unit to 1
         if isinstance(surf, sdf_data.SdfSurface):
             z_unit = 1
-            col = color=(0, 0, 0)
+            col = color = (0, 0, 0)
+        if self.z_resolution != z_resolution or self.z_unit != z_unit:
+            self.invalidateProjection()
+            self.z_resolution = z_resolution
+            self.z_unit = z_unit
         if not self.projection_valid:
-            self.points_projected = self.project_v3(surf, z_resolution * z_unit)
+            if self.projectionMethod == 'const. seg. len.':
+                self.points_projected = self.project_const_seg_len(surf, z_resolution)
+            elif self.projectionMethod == 'z':
+                self.points_projected = self.project_z_steps(surf, z_resolution * z_unit)
+            else:
+                # longest segments
+                self.points_projected = self.project_v3(surf, z_resolution * z_unit)
             self.projection_valid = True
 
         for pline in self.points_projected:
-            x = [x for x,y,z in pline]
-            y = [y for x,y,z in pline]
-            z = [z for x,y,z in pline]
+            x = [x for x, y, z in pline]
+            y = [y for x, y, z in pline]
+            z = [z for x, y, z in pline]
             ax.plot(x, y, z, color=col)
 
         npoints = 0

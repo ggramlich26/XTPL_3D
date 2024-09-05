@@ -54,9 +54,9 @@ def render(res: int):
     if not hasattr(render, 'initialized'):
 
         # creates a messagebox that checks if the function should be executed or not, Returns True or False
-        if not tk.messagebox.askyesno(title='Confirmation',
-                                      message=('Plot ' + ramp.get_file_name() + ' and ' + dxf.get_dxf_name() + ' ?')):
-            return
+        # if not tk.messagebox.askyesno(title='Confirmation',
+        #                               message=('Plot ' + ramp.get_file_name() + ' and ' + dxf.get_dxf_name() + ' ?')):
+        #     return
 
         # create figure and axis and save them in lists
         fig = Figure()
@@ -106,6 +106,9 @@ def render(res: int):
         dxf.set_shift(x_shift, y_shift)
         dxf.set_rotation(phi)
         ramp.set_rotation(x_shift, y_shift, phi)
+
+    # set currently selected projection method
+    dxf.set_projection_method(get_proj_meth())
 
     # left plot (interactive plot)
     ax = axes_list[0]
@@ -327,6 +330,11 @@ def get_unit_dropdown():
         return 10000
 
 
+def get_proj_meth():
+    """returns the chosen value of the dropdown menu"""
+    return proj_meth_dropdown_clicked.get()
+
+
 def export_button():
     """calls the export_xtpl_code function"""
     if len(dxf_list) == 0:
@@ -431,25 +439,34 @@ unit_dropdown_clicked.set(options[1])
 unit_dropdown = tk.OptionMenu(frm_buttons, unit_dropdown_clicked, *options)
 unit_dropdown_label = tk.Label(frm_buttons, text='CSV height unit')
 
+# create a dropdown menu and label for different projection methods
+options_proj_meth = ['const. seg. len.', 'z', 'longest segments']
+proj_meth_dropdown_clicked = tk.StringVar(frm_buttons)
+proj_meth_dropdown_clicked.set(options_proj_meth[2])
+proj_meth_dropdown = tk.OptionMenu(frm_buttons, proj_meth_dropdown_clicked, *options_proj_meth)
+proj_meth_dropdown_label = tk.Label(frm_buttons, text='Projection method')
+
 # create an entry text widget txt_enter_z_resolution and corresponding label
 txt_enter_z_resolution = tk.Entry(frm_buttons)
 txt_enter_z_resolution_label = tk.Label(frm_buttons,
-                                        text='z-resolution in µm')  # add get_unit_dropdown.get() but doesn't update when changing the dropdown menu
+                                        text='projection precision in µm')  # add get_unit_dropdown.get() but doesn't update when changing the dropdown menu
 
 txt_enter_z_resolution.insert(0, '1')
 
 # arrange buttons in the grid
 btn_open_csv.grid(row=0, column=0, sticky='ew', padx=5, pady=2.5)
 btn_open_dxf.grid(row=1, column=0, sticky='ew', padx=5, pady=2.5)
-btn_render.grid(row=11, column=0, sticky='ew', padx=5, pady=2.5)
 btn_export.grid(row=2, column=0, sticky='ew', padx=5, pady=2.5)
-btn_restart.grid(row=12, column=0, sticky='ew', padx=5, pady=2.5)
+unit_dropdown_label.grid(row=3, column=0, sticky='ew', padx=5, pady=2.5)
+unit_dropdown.grid(row=4, column=0, sticky='ew', padx=5, pady=2.5)
+proj_meth_dropdown_label.grid(row=5, column=0, sticky='ew', padx=5, pady=2.5)
+proj_meth_dropdown.grid(row=6, column=0, sticky='ew', padx=5, pady=2.5)
 txt_resolution_label.grid(row=7, column=0, sticky='ew', padx=5, pady=2.5)
 txt_resolution.grid(row=8, column=0, sticky='ew', padx=5, pady=2.5)
-unit_dropdown.grid(row=4, column=0, sticky='ew', padx=5, pady=2.5)
-unit_dropdown_label.grid(row=3, column=0, sticky='ew', padx=5, pady=2.5)
 txt_enter_z_resolution_label.grid(row=9, column=0, sticky='ew', padx=5, pady=2.5)
 txt_enter_z_resolution.grid(row=10, column=0, sticky='ew', padx=5, pady=2.5)
+btn_render.grid(row=11, column=0, sticky='ew', padx=5, pady=2.5)
+btn_restart.grid(row=12, column=0, sticky='ew', padx=5, pady=2.5)
 
 # create a frame for the navigation and add buttons as well as entry widgets
 frm_navigate = tk.Frame(frm_txt)
